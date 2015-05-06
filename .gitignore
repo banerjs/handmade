@@ -1,0 +1,4 @@
+build/
+*.sln
+*.suo
+*.sublime-*
