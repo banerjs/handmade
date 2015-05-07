@@ -10,11 +10,41 @@ This is the first file that we are adding as part of this project
 
 // WTF?!?! Global variable....
 global_variable bool Running;
+global_variable BITMAPINFO BitmapInfo;
+global_variable void *BitmapMemory;
+global_variable HBITMAP BitmapHandle;
+global_variable HDC BitmapDeviceContext;
 
 // This gets called everytime the window is resized
 internal void Win32ResizeDIBSection(int Width, int Height)
 {
-    CreateDIBSection();
+    // TODO: Bulletproof this. Mabe don't free first, free after. Then free
+    // first if that fails
+
+    if (BitmapHandle)
+    {
+        DeleteObject(BitmapHandle);
+    }
+
+    if (!BitmapDeviceContext)
+    {
+        // Should we recreate under special circumstances
+        BitmapDeviceContext = CreateCompatibleDC(0);
+    }
+
+    BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
+    BitmapInfo.bmiHeader.biWidth = Width;
+    BitmapInfo.bmiHeader.biHeight = Height;
+    BitmapInfo.bmiHeader.biPlanes = 1;
+    BitmapInfo.bmiHeader.biBitCount = 32;
+    BitmapInfo.bmiHeader.biCompression = BI_RGB;
+
+    BitmapHandle = CreateDIBSection(BitmapDeviceContext,
+                                    &BitmapInfo,
+                                    DIB_RGB_COLORS,
+                                    &BitmapMemory,
+                                    NULL,
+                                    NULL);
 }
 
 
@@ -22,9 +52,18 @@ internal void Win32ResizeDIBSection(int Width, int Height)
 // 1. Windows thinks pixels are stale
 // 2. User actions will cause pixels to be stale
 // 3. Game render needs to be forced at 30fps
-internal void Win32UpdateWindow(HWND Window, int X, int Y, int Width, int Height)
+internal void Win32UpdateWindow(HDC DeviceContext,
+                                int X,
+                                int Y,
+                                int Width,
+                                int Height)
 {
-    StretchDIBits();
+    StretchDIBits(DeviceContext,
+                  X, Y, Width, Height,
+                  X, Y, Width, Height,
+                  BitmapMemory,
+                  &BitmapInfo,
+                  DIB_RGB_COLORS, SRCCOPY);
 }
 
 
@@ -80,7 +119,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window,
             int Y = Paint.rcPaint.top;
             int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
             int Width = Paint.rcPaint.right - Paint.rcPaint.left;
-            Win32UpdateWindow(Window, X, Y, Width, Height);
+            Win32UpdateWindow(DeviceContext, X, Y, Width, Height);
 
             EndPaint(Window, &Paint);
         } break;
