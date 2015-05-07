@@ -4,10 +4,36 @@ This is the first file that we are adding as part of this project
 
 #include <windows.h>
 
-LRESULT CALLBACK MainWindowCallback(HWND Window,
-                                    UINT Message,
-                                    WPARAM WParam,
-                                    LPARAM LParam)
+#define internal static
+#define local_persist static
+#define global_variable static
+
+// WTF?!?! Global variable....
+global_variable bool Running;
+
+// This gets called everytime the window is resized
+internal void Win32ResizeDIBSection(int Width, int Height)
+{
+    CreateDIBSection();
+}
+
+
+// Repainting of things within the window happens in three different cases
+// 1. Windows thinks pixels are stale
+// 2. User actions will cause pixels to be stale
+// 3. Game render needs to be forced at 30fps
+internal void Win32UpdateWindow(HWND Window, int X, int Y, int Width, int Height)
+{
+    StretchDIBits();
+}
+
+
+// This is the callback that Windows expects in order to handle events on the
+// created window
+LRESULT CALLBACK Win32MainWindowCallback(HWND Window,
+                                         UINT Message,
+                                         WPARAM WParam,
+                                         LPARAM LParam)
 {
     LRESULT Result = 0;
 
@@ -16,19 +42,26 @@ LRESULT CALLBACK MainWindowCallback(HWND Window,
         // The Size of the window has changed
         case WM_SIZE:
         {
+            RECT ClientRect;
+            GetClientRect(Window, &ClientRect);
+            int Width = ClientRect.right - ClientRect.left;
+            int Height = ClientRect.bottom - ClientRect.top;
+            Win32ResizeDIBSection(Width, Height);
             OutputDebugStringA("WM_SIZE\n");
         } break;
 
         // The window is about to be destroyed
         case WM_DESTROY:
         {
-            OutputDebugStringA("WM_DESTROY\n");
+            // TODO: Remove dependence on global vars
+            Running = false;
         } break;
 
         // The user has clicked on the Red 'X' in the corner
         case WM_CLOSE:
         {
-            OutputDebugStringA("WM_CLOSE\n");
+            // TODO: Remove dependence on global vars
+            Running = false;
         } break;
 
         // We are the currently active window
@@ -47,7 +80,7 @@ LRESULT CALLBACK MainWindowCallback(HWND Window,
             int Y = Paint.rcPaint.top;
             int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
             int Width = Paint.rcPaint.right - Paint.rcPaint.left;
-            PatBlt(DeviceContext, X, Y, Width, Height, WHITENESS);
+            Win32UpdateWindow(Window, X, Y, Width, Height);
 
             EndPaint(Window, &Paint);
         } break;
@@ -64,6 +97,7 @@ LRESULT CALLBACK MainWindowCallback(HWND Window,
 }
 
 
+// Main method. Expected by Windows
 int CALLBACK WinMain(HINSTANCE Instance,
                      HINSTANCE PrevInstance,
                      LPSTR CommandLine,
@@ -73,7 +107,7 @@ int CALLBACK WinMain(HINSTANCE Instance,
 
     // Then selectively initialize the members that we care about
     WindowClass.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
-    WindowClass.lpfnWndProc = MainWindowCallback;
+    WindowClass.lpfnWndProc = Win32MainWindowCallback;
     WindowClass.hInstance = Instance;
     // WindowClass.hIcon; // Save this for later
     WindowClass.lpszClassName = "HandmadeHeroWindowClass";
@@ -97,13 +131,14 @@ int CALLBACK WinMain(HINSTANCE Instance,
         {
             // If successful, setup message passing
             MSG Message;
-            for (;;)
+            Running = true;
+            while(Running)
             {
-                BOOL MessageResult = GetMessage(&Message, 0, 0, 0); // Grab all
+                BOOL MessageResult = GetMessageA(&Message, 0, 0, 0); // Grab all
                 if (MessageResult > 0)
                 {
                     TranslateMessage(&Message);
-                    DispatchMessage(&Message);
+                    DispatchMessageA(&Message);
                 }
                 else
                 {
